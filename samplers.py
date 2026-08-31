@@ -59,12 +59,12 @@ class GenerationTrace:
         return len(self.steps)
 
 
-def simple_forward_fn(model, pass_time: bool = True) -> Callable:
+def simple_forward_fn(model, pass_time=True):
     def forward_fn(x, t):
         out = model(x, t) if pass_time else model(x)
         logits = out.logits if hasattr(out, "logits") else out
         return (logits[0] if logits.dim() == 3 else logits), None
-
+    
     return forward_fn
 
 
@@ -310,3 +310,4 @@ def check_ancestral_rate(forward_fn, x_init, timesteps, mask_token_id, n_runs=20
     observed = sum(counts) / len(counts)
     deviation = abs(observed - expected) / expected
     return {"expected": expected, "observed": observed, "dev": deviation, "passed": deviation < tol}
+
