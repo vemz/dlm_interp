@@ -41,5 +41,3 @@ out, _ = run_sampler(fwd, torch.full((L,), mask_id), ts, mask_id,
                      rule="ancestral", token_rule="sample", seed=0, keep_hidden=False)
 
 m = content_mask(out, s)
-print("content:", int(m.sum()), "/", L, f"({100*(1-m.float().mean()):.0f}% structural)")
-print(sequence_logprob(model, out, m))
