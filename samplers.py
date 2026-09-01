@@ -11,6 +11,7 @@ TOKEN_RULES = {
     "ancestral": "sample",
     "random_fixed_k": "argmax",
     "top_k_confidence": "argmax",
+    "left_to_right": "argmax",
 }
 
 
@@ -168,6 +169,7 @@ def run_sampler(
 
         logits_all, hidden = forward_fn(result.unsqueeze(0), float(t))
         logits = logits_all[positions].float()
+        logits[:, mask_token_id] = float("-inf")
         confidence, entropy, margin, top_ids, top_logits = score_positions(logits)
 
         if rule == "ancestral":
@@ -180,6 +182,8 @@ def run_sampler(
                 continue
             if rule == "random_fixed_k":
                 selected = torch.randperm(n, generator=generator).to(device)[:k]
+            elif rule == "left_to_right":
+                selected = torch.arange(k, device=device)
             else:
                 selected = confidence.topk(k).indices
 
@@ -217,6 +221,8 @@ def run_sampler(
         )
 
     trace.x_final = result.clone().cpu()
+    if rule != "ancestral":
+        assert not (result == mask_token_id).any(), f"{rule} left masked positions"
     return result, trace
 
 
@@ -233,6 +239,12 @@ def random_fixed_k_sampler(forward_fn, x_init, timesteps, mask_token_id, schedul
 def top_k_confidence_sampler(forward_fn, x_init, timesteps, mask_token_id, schedule, **kwargs):
     return run_sampler(
         forward_fn, x_init, timesteps, mask_token_id, "top_k_confidence", schedule, **kwargs
+    )
+
+# autoregressive
+def left_to_right_sampler(forward_fn, x_init, timesteps, mask_token_id, schedule, **kwargs):
+    return run_sampler(
+        forward_fn, x_init, timesteps, mask_token_id, "left_to_right", schedule, **kwargs
     )
 
 
