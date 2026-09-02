@@ -7,7 +7,7 @@ from quality import sequence_logprob, structural_token_ids
 from samplers import annotate_trace, run_sampler, uniform_schedule
 
 RULES = ("ancestral", "random_fixed_k", "top_k_confidence", "left_to_right")
-SEEDS = range(10)
+SEEDS = range(50)
 METRICS = ("q_per_token", "q_content_per_token", "frac_structural", "effective_len", "eos_count")
 
 def generate(model, forward_fn, seq_len, mask_id, structural, eos_id, rule, seed):
@@ -64,7 +64,8 @@ def main():
         for key in METRICS:
             mean = statistics.fmean(stats[key])
             std = statistics.stdev(stats[key]) if len(stats[key]) > 1 else 0.0
-            print(f"  {key:22s} {mean:9.4f} ± {std:.4f}")
+            sem = std / len(stats[key]) ** 0.5
+            print(f"  {key:22s} {mean:9.4f} ± {std:.4f}  (SE {sem:.4f})")
         print()
 
 if __name__ == "__main__":
