@@ -2,9 +2,9 @@ from __future__ import annotations
 import statistics
 import torch
 from transformers import AutoTokenizer
-from load import load_model, nano_forward_fn
-from quality import structural_token_ids
-from samplers import annotate_trace, first_commit_index, run_sampler, uniform_schedule
+from src.dlm_interp.load import load_model, nano_forward_fn
+from src.dlm_interp.quality import structural_token_ids
+from src.dlm_interp.samplers import annotate_trace, first_commit_index, run_sampler, uniform_schedule
 
 RULES = ("random_fixed_k", "top_k_confidence", "left_to_right", "ancestral")
 TOKEN_RULES = ("sample", "argmax")

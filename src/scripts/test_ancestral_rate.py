@@ -1,6 +1,6 @@
 import torch
-from load import load_model, nano_forward_fn
-from samplers import HiddenCapture, check_ancestral_rate
+from src.dlm_interp.load import load_model, nano_forward_fn
+from src.dlm_interp.samplers import HiddenCapture, check_ancestral_rate
 
 model, cfg = load_model()
 MASK_ID, L = cfg["mask_id"], cfg["seq_len"]

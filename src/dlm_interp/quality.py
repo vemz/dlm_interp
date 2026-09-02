@@ -29,8 +29,8 @@ s = structural_token_ids(tok)
 print(len(s), [tok.decode([i]) for i in sorted(s)])
 
 import torch
-from load import load_model, nano_forward_fn
-from samplers import run_sampler, uniform_schedule
+from src.dlm_interp.load import load_model, nano_forward_fn
+from src.dlm_interp.samplers import run_sampler, uniform_schedule
 
 model, cfg = load_model()
 mask_id, L = int(cfg["mask_id"]), int(cfg["seq_len"])

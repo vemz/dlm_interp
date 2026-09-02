@@ -1,8 +1,8 @@
 from __future__ import annotations
 import numpy as np
 import torch
-from load import load_model, nano_forward_fn
-from samplers import HiddenCapture, score_positions
+from src.dlm_interp.load import load_model, nano_forward_fn
+from src.dlm_interp.samplers import HiddenCapture, score_positions
 
 VAL_BIN = "data/tinystories/val.bin"
 OUT = "labels_waitgain.pt"

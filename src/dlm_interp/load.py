@@ -1,5 +1,5 @@
 import torch
-from model import ModelConfig, NanoMDLM
+from src.dlm_interp.model import ModelConfig, NanoMDLM
 
 CKPT = "baseline_s0/best.pt"
 

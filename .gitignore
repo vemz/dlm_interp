@@ -9,3 +9,5 @@ baseline_s0
 .venv/
 venv/
 __pycache__/
+results.md
+README draft.md
