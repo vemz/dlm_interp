@@ -4,3 +4,8 @@
 baseline_s0
 /data
 *.pt
+/tinystories_results
+/.venv310
+.venv/
+venv/
+__pycache__/
