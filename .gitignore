@@ -4,7 +4,7 @@
 baseline_s0
 /data
 *.pt
-/results
+/results/
 /.venv310
 .venv/
 venv/
