@@ -3,4 +3,4 @@
 /__pycache__
 baseline_s0
 /data
-labels_gtmargin.pt
+*.pt

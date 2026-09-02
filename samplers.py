@@ -109,7 +109,7 @@ def uniform_schedule(n_masked: int, n_steps: int) -> list[int]:
 def score_positions(logits, topk=TOPK):
     logprobs = logits.log_softmax(-1)
     probs = logprobs.exp()
-    entropy = -(probs * logprobs).sum(-1)
+    entropy = -(probs * logprobs.nan_to_num(neginf=0.0)).sum(-1)
     top_probs, top_ids = probs.topk(min(topk, logits.shape[-1]), dim=-1)
     confidence = top_probs[:, 0]
     margin = confidence - top_probs[:, 1]
