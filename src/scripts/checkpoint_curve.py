@@ -1,12 +1,3 @@
-"""Does the readiness advantage of the residual stream grow or shrink as the
-model learns?
-
-For each training checkpoint: collect wait-gain labels, fit the probe families
-over several split seeds, and plot the advantage against training step.
-
-Run collect_waitgain.py logic inline so nothing has to be staged to disk twice.
-"""
-
 from __future__ import annotations
 
 import csv
