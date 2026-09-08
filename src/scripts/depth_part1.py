@@ -1,23 +1,3 @@
-"""The depth question on Part 1, where the hidden states are not pooled.
-
-Part 2 found no depth effect once every layer was given enough components. One
-explanation for the fixed-budget gap was never tested: those states are averaged
-over the k = 4 positions about to be committed, and layer 5 is where
-representations are most position- and token-specific, so mean-pooling may simply
-destroy more there. That would make layer 5 harder to read whatever the target --
-which is what the marginal control in depth_controls.py actually shows.
-
-Part 1 settles it for free. Its label files store one row per masked position with
-no pooling at all, and labels_waitgain.pt carries ln_f alongside blocks 1, 3 and 5,
-so the deepest possible readout is included. If depth is flat here too, the null
-holds and pooling is not the explanation.
-
-Per layer rather than concatenated, so the memory stays small even at the rung
-with no PCA.
-
-    python src/scripts/depth_part1.py [readiness|predictability]
-"""
-
 from __future__ import annotations
 
 import csv

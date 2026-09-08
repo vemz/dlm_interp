@@ -1,30 +1,3 @@
-"""Intervals for Result 1.3, the training curve.
-
-The published curve reports, per checkpoint, a baseline R2 and the R2 with the
-residual stream added, each with a spread over three split seeds and no interval
-on the thing the claim is about. Two claims are drawn from it:
-
-    the ABSOLUTE advantage is flat at about +0.033
-    the RELATIVE advantage collapses from 95% at 5k steps to 42% at 30k
-
-The second is the falsifiable prediction for LLaDA and Dream, and it is a ratio
-of two small numbers whose denominator is itself an estimate. A ratio like that
-needs its own bootstrap; a spread over three split seeds is not one.
-
-What makes this tractable: checkpoint_curve.py draws its windows with
-default_rng(0) and its masks with manual_seed(0) for every checkpoint, so all six
-share the same windows, the same masked positions and the same rows. The splits
-therefore match too. Every quantity here can be paired across checkpoints inside
-a single bootstrap draw -- including the trend, which is what the prediction
-actually asserts.
-
-Two feature budgets are run: the published 50 components per layer, and no PCA at
-all, because a relative collapse could also be a compression story if the later
-checkpoints spread the same information over more directions.
-
-    python src/scripts/checkpoint_curve_bootstrap.py [cache_dir]
-"""
-
 from __future__ import annotations
 
 import csv

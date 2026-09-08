@@ -1,20 +1,3 @@
-"""The three models side by side.
-
-n = 3 is not a variance estimate. Three numbers give a standard error you should
-not trust and an interval nobody will believe, and quoting sd/sqrt(3) here would
-repeat exactly the mistake that cost Part 2 its horizon claim. What three
-independently trained models buy is a **replication count**: the claim either
-reappears in each one with an interval that clears zero, or it does not.
-
-So this prints, per claim, one row per model and one summary line of the form
-"3 of 3 clear zero in the predicted direction". Nothing is pooled across models.
-
-Reads whatever exists among results/, results_s1/, results_s2/ and skips the
-rest, so it is safe to run before all three seeds are collected.
-
-    python src/scripts/compare_seeds.py
-"""
-
 from __future__ import annotations
 
 import csv
