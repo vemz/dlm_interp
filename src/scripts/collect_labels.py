@@ -5,9 +5,10 @@ import torch
 
 from src.dlm_interp.load import load_model, nano_forward_fn
 from src.dlm_interp.samplers import HiddenCapture, score_positions
+from src.dlm_interp.paths import RUNS
 
 VAL_BIN = "data/tinystories/val.bin"
-OUT = "labels_gtmargin.pt"
+OUT = RUNS / "labels_gtmargin.pt"
 
 N_WINDOWS = 200
 T_VALUES = (0.2, 0.5, 0.8)

@@ -1,7 +1,10 @@
+import os
 import torch
-from src.dlm_interp.model import ModelConfig, NanoMDLM
 
-CKPT = "baseline_s0/best.pt"
+from src.dlm_interp.model import NanoMDLM, ModelConfig
+from src.dlm_interp.paths import CKPT_ROOT
+
+CKPT = CKPT_ROOT / os.environ.get("DLM_CKPT", "baseline_s0/best.pt")
 
 def load_model(path=CKPT):
     ckpt = torch.load(path, map_location="cpu", weights_only=False)

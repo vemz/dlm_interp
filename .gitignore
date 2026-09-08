@@ -15,3 +15,17 @@ sweep_horizon.py
 diagnose_value.py
 sweep_horizon.py
 diagnose_value.py
+__pycache__/
+.venv*/
+runs/
+cache_waitgain/
+data/
+baseline_s0/
+results/*.png
+/results_s2
+/results_s1
+/baseline_s1_30k
+/baseline_s2_30k
+/runs_s2
+/runs_s1
+src/scripts/archive/
