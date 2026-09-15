@@ -17,8 +17,8 @@ PROBE_EVERY = 2
 HORIZONS = (0, 1, 2, 4, 8, 16)
 LAYERS = (1, 3, 5)
 SEED = 0
-
-SCALARS = ("penalty", "marginal", "chain", "order_gap",
+N_ORDERS = 6                                   
+SCALARS = ("penalty", "marginal", "chain", "chain_split_a", "chain_split_b", "order_gap",
            "conf_mean", "conf_min", "conf_max", "conf_spread",
            "entropy_mean", "margin_mean", "step", "n_masked", "generation")
 
@@ -85,9 +85,12 @@ def run_generation(forward_fn, seq_len, mask_id, k, generator, gen_id):
         history.append((info["hidden"], (x == mask_id).nonzero(as_tuple=False).squeeze(-1)))
 
         if step % PROBE_EVERY == 0 and len(history) > max(HORIZONS):
-            orders = [list(range(k)), torch.randperm(k, generator=generator).tolist()]
-            chains = [chain_sum(forward_fn, x, info["positions"], info["tokens"], mask_id, o)
-                      for o in orders]
+            orders = [list(range(k))] + [
+                torch.randperm(k, generator=generator).tolist()
+                for _ in range(N_ORDERS - 1)]
+            chains = [chain_sum(forward_fn, x, info["positions"], info["tokens"],
+                                mask_id, order) for order in orders]
+            half = N_ORDERS // 2
 
             pooled, usable = {}, True
             for h in HORIZONS:
@@ -104,8 +107,10 @@ def run_generation(forward_fn, seq_len, mask_id, k, generator, gen_id):
                         "conf_spread", "entropy_mean", "margin_mean")}
                 row.update({
                     "chain": float(np.mean(chains)),
+                    "chain_split_a": float(np.mean(chains[:half])),
+                    "chain_split_b": float(np.mean(chains[half:])),
                     "penalty": float(np.mean(chains)) - info["marginal"],
-                    "order_gap": abs(chains[0] - chains[1]),
+                    "order_gap": float(np.std(chains)),
                     "step": step,
                     "generation": gen_id,
                 })
