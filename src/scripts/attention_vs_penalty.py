@@ -151,9 +151,6 @@ def replay(model, capture, layers, mask_id, seq_len, stored):
 
             x[positions] = tokens
 
-        if (gen + 1) % 20 == 0:
-            print(f"  {gen + 1}/{N_GENERATIONS} generations, {row_id} rows", flush=True)
-
     assert row_id == len(stored["marginal"]), (
         f"replay produced {row_id} probed steps, the labels file has "
         f"{len(stored['marginal'])}")
@@ -192,17 +189,17 @@ def main():
 
     if args.reuse and OUT_FEATURES.exists():
         rows = torch.load(OUT_FEATURES, weights_only=False)
-        print(f"reusing {OUT_FEATURES} ({len(rows)} rows)")
+        # Reuse replayed attention features when available.
     else:
         model, cfg = load_model()
         mask_id, seq_len = int(cfg["mask_id"]), int(cfg["seq_len"])
         layers = args.layers if args.layers is not None else list(range(len(model.blocks)))
-        print(f"replaying {N_GENERATIONS} generations, attention over layers {layers}")
+        # Replay the stored trajectories and capture attention features.
         capture = QKVCapture(model, layers)
         with capture:
             rows = replay(model, capture, layers, mask_id, seq_len, stored)
         torch.save(rows, OUT_FEATURES)
-        print(f"saved {OUT_FEATURES}")
+        
 
     gen = np.array([r["generation"] for r in rows])
     cost = np.maximum(-stored["penalty"], 0)
@@ -219,25 +216,14 @@ def main():
         "n_masked":             stored["n_masked"],
     }
 
-    print("\n" + "=" * 78)
-    print("RANK CORRELATION with factorization cost")
-    print("=" * 78)
-    print("  Sign convention: every feature is oriented so that HIGHER should mean")
-    print("  MORE cost, if the hypothesis behind it holds.\n")
-    print(f"  {'feature':>22} {'spearman':>10}")
-    print("  " + "-" * 34)
+    # Rank features by their ability to target expensive steps.
+    print("feature correlation")
     for name, f in features.items():
-        print(f"  {name:>22} {spearmanr(f, cost).statistic:>+10.4f}")
+        print(f"{name}: {spearmanr(f, cost).statistic:+.4f}")
 
-    print("\n" + "=" * 78)
-    print("GATE CAPTURE EFFICIENCY  (share of cost captured / share of steps gated)")
-    print("=" * 78)
-    print("  1.00x is chance. The oracle is the ceiling. A feature that does not")
-    print("  clearly beat 1.00x is not a dependence estimator, whatever its")
-    print("  correlation looks like.\n")
+    print("\ncapture efficiency")
     head = f"  {'feature':>22}" + "".join(f"{f'@{int(r*100)}%':>22}" for r in GATE_RATES)
     print(head)
-    print("  " + "-" * (len(head) - 2))
 
     rng = np.random.default_rng(BOOT_SEED)
     out_rows = []
@@ -252,17 +238,13 @@ def main():
             out_rows.append([name, r, f"{pt:.4f}", f"{lo:.4f}", f"{hi:.4f}"])
         print(line)
 
-    print("\n  Read the in-bundle row against its two controls. If attention to")
-    print("  OTHER masked positions scores the same, the in-bundle number is not")
-    print("  about this bundle and the hypothesis is not supported.")
-
     out = RESULTS / "attention_vs_penalty.csv"
     out.parent.mkdir(parents=True, exist_ok=True)
     with open(out, "w", newline="") as h:
         w = csv.writer(h)
         w.writerow(["feature", "gate_rate", "capture_efficiency", "boot_lo", "boot_hi"])
         w.writerows(out_rows)
-    print(f"\nwrote {out}")
+    print(f"saved {out}")
 
 
 if __name__ == "__main__":

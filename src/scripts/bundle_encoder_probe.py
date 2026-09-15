@@ -93,16 +93,11 @@ def main():
     dist = rec["mean_dist"].numpy()
 
     n, k, d = states.shape
-    print(f"model tag: {TAG or '_s0'}")
-    print(f"{n} steps over {len(np.unique(gen))} generations, "
-          f"k = {k} positions, {d} dims each")
-    print(f"steps {int(rec['step'].min())}–{int(rec['step'].max())}, "
-          f"{float((cost > 0).mean()):.1%} of steps pay\n")
+    # Compare compact encodings of the committed bundle.
 
     encoders = {"mean": None, "moments": None, "concat": None}
     for name in encoders:
         encoders[name] = encode(states, name)
-        print(f"  {name:>8}: {encoders[name].shape[1]} dims")
 
     variants = [("mean_dist (free, unfitted)", None, None)]
     for name, enc in encoders.items():
@@ -125,12 +120,9 @@ def main():
                 s = fit_ridge(x, cost, train, val)(x[test])
                 r2s[label].append(r2(s, cost[test]))
             scores[label].append(s)
-        print(f"  split seed {seed} done", flush=True)
 
     rng = np.random.default_rng(BOOT_SEED)
-    print("\n" + "=" * 96)
-    print("ENCODER COMPARISON — ridge throughout, only the encoding changes")
-    print("=" * 96 + "\n")
+    print("encoder comparison")
     head = f"  {'variant':>28} {'R2':>7}" + "".join(
         f"{f'@{int(r * 100)}%':>20}" for r in GATE_RATES)
     print(head)
@@ -157,9 +149,7 @@ def main():
                          for i in range(len(SEEDS))]))
     print(f"\n  oracle @20%: {orc:.2f}x")
 
-    print("\n" + "=" * 96)
-    print("DOES A RICHER ENCODER HELP?")
-    print("=" * 96)
+    print("\nencoder summary")
     base_free = table["free only, ridge"][0.20][0]
     base_dist = table["mean_dist (free, unfitted)"][0.20][0]
     print(f"  free scalars alone: {base_free:.2f}x;  "
@@ -178,21 +168,10 @@ def main():
     best = table[f"{best_name} + free, ridge"][0.20][0]
     gain = best - m_mean
 
-    print("\n  reading:")
-    if gain > 0.10:
-        print(f"    -> '{best_name}' beats mean pooling by {gain:+.2f}x. Pooling")
-        print("       was the bottleneck, and a set transformer — strictly more")
-        print("       expressive than sorting and concatenating — is worth")
-        print(f"       building. Its ceiling is the {orc:.2f}x oracle.")
-    else:
-        print(f"    -> no encoder beats mean pooling by more than {gain:+.2f}x.")
-        print("       Pooling was not the bottleneck: the set-level information")
-        print("       these features carry is a summary, and a richer encoder")
-        print("       has nothing more to read. Option A's remaining headroom is")
-        print(f"       {orc - best:.2f}x and not reachable this way.")
+    print(f"best={best_name}, gain_over_mean={gain:+.2f}x, oracle={orc:.2f}x")
 
     # best achievable line, separate from the controlled comparison
-    print("\n  best-achievable check (GBM on the winning encoder + free):")
+    print("gbm check")
     x = np.hstack([encoders[best_name], free])
     pts = []
     for seed in SEEDS:
@@ -203,16 +182,14 @@ def main():
           f"(ridge {best:.2f}x, oracle {orc:.2f}x)")
     out_rows.append([TAG or "_s0", f"{best_name}+free_gbm", 0.20,
                      f"{np.mean(pts):.4f}", "", ""])
-    print("    Model class is varied here and only here; the table above holds it")
-    print("    fixed so the encoder is the only thing that moves.")
-
+    # Save the compact comparison table.
     path = RESULTS / "bundle_encoder_probe.csv"
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", newline="") as h:
         w = csv.writer(h)
         w.writerow(["model", "variant", "gate_rate", "capture", "lo", "hi"])
         w.writerows(out_rows)
-    print(f"\nwrote {path}")
+    print(f"saved {path}")
 
 
 if __name__ == "__main__":

@@ -207,8 +207,6 @@ def gsm8k_eval(model, tok, rules, n_problems, args, device):
             pred = extract_answer(out)
             acc[rule].append(float(pred is not None and gold is not None
                                    and pred == gold))
-        if (i + 1) % 25 == 0:
-            print(f"  {i + 1}/{n}", flush=True)
     return acc, fmt
 
 def load_llada(model_id, device):
@@ -216,7 +214,6 @@ def load_llada(model_id, device):
     from transformers import AutoModel, AutoTokenizer
 
     ver = transformers.__version__
-    print(f"  transformers {ver}, torch {torch.__version__}")
     dtype = torch.bfloat16 if device == "cuda" else torch.float32
 
     tok = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
@@ -331,8 +328,6 @@ def run_config(model, tok, name, block_len, args, device, real=None):
             dv[rule].append(diversity(gen))
             if seed < 2:
                 first[rule].append(gen)
-        if (seed + 1) % 5 == 0:
-            print(f"  {seed + 1}/{args.seeds} seeds", flush=True)
 
     for rule, xs in first.items():
         assert not torch.equal(xs[0], xs[1]), (

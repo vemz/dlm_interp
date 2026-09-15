@@ -131,8 +131,6 @@ def analyse(record, layers, label, rows_out):
             _, p, _ = fit(x_no_u, y[stat], train, val)
             push(f"r2_{stat}_deflated", r2(p(x_no_u[test]), y[stat][test]))
 
-        print(f"  split seed {seed} done", flush=True)
-
     assert len(u_by_split) == len(SEEDS) == len(c_by_split), (
         f"collected {len(u_by_split)} readiness directions and "
         f"{len(c_by_split)} confidence directions for {len(SEEDS)} splits — "
@@ -151,19 +149,11 @@ def analyse(record, layers, label, rows_out):
         rows_out.append([TAG or "_s0", label, key, f"{m:.4f}", f"{sd:.4f}"])
 
     pu, pc = pairwise_cos(u_by_split), pairwise_cos(c_by_split)
-    print(f"\n  direction stability across the {len(SEEDS)} splits "
-          f"(|cos| over {len(pu)} pairs):")
-    print(f"    {'readiness':>12}  mean {np.mean(pu):.4f}   min {min(pu):.4f}")
-    print(f"    {'confidence':>12}  mean {np.mean(pc):.4f}   min {min(pc):.4f}"
-          f"   <- reference, fitted at R2 ~{s('r2_confidence')[0]:.2f}")
+    print(f"direction stability: readiness={np.mean(pu):.4f}, confidence={np.mean(pc):.4f}")
     rows_out.append([TAG or "_s0", label, "dirstab_ready_mean",
                      f"{np.mean(pu):.4f}", f"{min(pu):.4f}"])
     rows_out.append([TAG or "_s0", label, "dirstab_conf_mean",
                      f"{np.mean(pc):.4f}", f"{min(pc):.4f}"])
-    if np.mean(pu) > 0.9999 and np.mean(pc) > 0.9999:
-        print("    !! both exactly 1.0000 — that is the duplicate-append bug, not")
-        print("       a result. Check the scope of u_by_split.append.")
-
     r_full, _ = s("r2_ready")
     r_one, _ = s("r2_ready_rank1")
     r_def, _ = s("r2_ready_deflated")
@@ -171,50 +161,18 @@ def analyse(record, layers, label, rows_out):
     rank = int(round(s("subspace_rank")[0]))
     in_mean, in_p95 = random_inside_null(dim, rank)
 
-    print("\n  reading:")
     frac = r_one / r_full if r_full > 0 else float("nan")
-    print(f"    rank-1 recovers {frac:.0%} of the full readiness R2 — "
-          + ("a direction is a fair description."
-             if frac > 0.6 else
-             "readiness is NOT one direction; the framing needs rank > 1."))
-
-    if np.mean(pu) < 0.7 * np.mean(pc):
-        print(f"    !! the readiness direction is NOT identified: it moves between")
-        print(f"       splits ({np.mean(pu):.2f}) far more than confidence does")
-        print(f"       ({np.mean(pc):.2f}). Report a subspace, not a direction, and")
-        print(f"       do not quote cos(u, .) as a property of the model.")
+    print(f"rank1_fraction={frac:.3f}")
 
     svs = [s(f"singular_{i}")[0] for i in range(3) if f"singular_{i}" in acc]
     print(f"    output subspace: rank {rank}, singular values "
           + ", ".join(f"{v:.3f}" for v in svs))
-    if len(svs) >= 2 and svs[1] < 0.2 * svs[0]:
-        print("    !! the three statistics are near-collinear: deflating them is")
-        print("       deflating roughly one direction, and the test is weaker than")
-        print("       the count of targets suggests.")
-
-    print(f"    ‖P_span u‖ = {inside:.4f} against a null of {in_mean:.4f} "
-          f"(95th pct {in_p95:.4f}) for a random direction and a random "
-          f"{rank}-dim subspace.")
+    print(f"subspace_rank={rank}, projection={inside:.4f}, null95={in_p95:.4f}")
 
     keep_r = r_def / r_full if r_full > 0 else float("nan")
     worst_c = min((s(f"r2_{k}_deflated")[0] / s(f"r2_{k}")[0])
                   for k in OUTPUT_STATS if s(f"r2_{k}")[0] > 0)
-    print(f"    deflating span(confidence, entropy, margin) keeps {keep_r:.0%} of "
-          f"readiness R2;")
-    print(f"    deflating u keeps at worst {worst_c:.0%} of an output statistic's R2.")
-
-    if keep_r > 0.8 and worst_c > 0.8:
-        print("    -> SEPARABLE FROM ALL THREE. Readiness survives removing the")
-        print("       whole instantaneous output subspace, and the control confirms")
-        print("       this is not just that a few directions out of many hardly")
-        print("       matter. Scope: instantaneous statistics only — temporal KL is")
-        print("       untested here and needs a trajectory collection.")
-    elif keep_r < 0.5:
-        print("    -> NOT SEPARABLE. Most of the readiness signal lies inside the")
-        print("       span of the output statistics; an output-side score can reach")
-        print("       it and the branch closes here.")
-    else:
-        print("    -> PARTIAL. Report the fraction, not a verdict.")
+    print(f"deflated_readiness={keep_r:.3f}, output_control={worst_c:.3f}")
 
 def main():
     if not LABELS.exists():
@@ -223,8 +181,7 @@ def main():
     layers = sorted(record["hidden"])
     deepest = layers[-1]
     print(f"model tag: {TAG or '_s0'}")
-    print(f"layers: {layers} (layer {deepest} is ln_f — what a sampler already has")
-    print("in hand at selection time, so it is the deployable case)")
+    # Compare the final normalized state with the full residual stream.
 
     rows = []
     analyse(record, [deepest], f"ln_f (layer {deepest})", rows)
@@ -236,10 +193,7 @@ def main():
         w = csv.writer(h)
         w.writerow(["model", "features", "quantity", "mean", "sd_or_min"])
         w.writerows(rows)
-    print(f"\nwrote {out}")
-    print("\nRun the other two model seeds with DLM_TAG / DLM_CKPT before reading")
-    print("any of this as a property of masked diffusion models rather than of one")
-    print("checkpoint. compare_seeds.py is where the three get put side by side.")
+    print(f"saved {out}")
 
 if __name__ == "__main__":
     main()

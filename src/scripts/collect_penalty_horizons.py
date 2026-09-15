@@ -141,10 +141,7 @@ def main():
                 for h, layers in pooled.items():
                     for layer, vector in layers.items():
                         hidden_out[h].setdefault(layer, []).append(vector.reshape(1, -1))
-            if (gen + 1) % 20 == 0:
-                print(f"  {gen + 1}/{N_GENERATIONS} generations, "
-                      f"{len(scalars['penalty'])} rows")
-
+            
     record = {key: torch.tensor(value, dtype=torch.float32) for key, value in scalars.items()}
     record["hidden"] = {
         h: {layer: torch.cat(chunks) for layer, chunks in layers.items()}
@@ -162,22 +159,9 @@ def main():
     )
 
     penalty = record["penalty"]
-    print(f"\n{len(penalty)} probed steps over {N_GENERATIONS} generations, k={K}")
-    print(f"penalty: mean {penalty.mean():+.3f}, sd {penalty.std():.3f}, "
-          f"share negative {float((penalty < 0).float().mean()):.3f}")
-    print(f"order_gap: mean {record['order_gap'].mean():.3f} "
-          f"(vs |penalty| {penalty.abs().mean():.3f})")
-
-    across = record["marginal"][first][:n] - record["marginal"][second][:n]
-    print(f"generations differ: mean |Δmarginal| between gen 0 and 1 = "
-          f"{float(across.abs().mean()):.3f}")
-
-    for h in HORIZONS:
-        shape = next(iter(record["hidden"][h].values())).shape
-        print(f"  h={h}: {tuple(shape)} per layer")
-
+    # Save the trajectory labels and hidden states for downstream probes.
     torch.save(record, OUT)
-    print(f"\nsaved to {OUT}")
+    print(f"saved {OUT} ({len(penalty)} rows)")
 
 
 if __name__ == "__main__":

@@ -93,6 +93,7 @@ def generate(fwd, rule, mask_id, seq_len, k, generator):
 
 
 def k_sweep(fwd, model, mask_id, seq_len, structural):
+    # Measure where parallel decoding changes the ranking of rules.
     rules = ("confidence", f"confidence@{GAP}", "random", "left_to_right")
     print("\n" + "=" * 78)
     print(f"K SWEEP — {SWEEP_SEEDS} seeds per cell, sequence_logprob nats/token")
@@ -117,9 +118,6 @@ def k_sweep(fwd, model, mask_id, seq_len, structural):
             assert abs(delta) < 1e-9, (
                 "at k = 1 the gap constraint cannot bind — a non-zero difference "
                 "means spaced_topk is doing something it should not")
-    print("\n  The row where `confidence` stops being best is the crossover.")
-    print("  At k = 1 the spaced column must equal confidence exactly; it is")
-    print("  asserted, not eyeballed.")
 
 def main():
     from transformers import AutoTokenizer
@@ -130,9 +128,7 @@ def main():
     tok = AutoTokenizer.from_pretrained("roneneldan/TinyStories-33M")
     structural = structural_token_ids(tok)
 
-    print(f"{len(RULES)} rules x {N_SEEDS} seeds, k={K}, "
-          f"{seq_len // K} steps each — NFE matched by construction\n")
-
+    # Generate matched-NFE samples under each selection rule.
     q, qc, nb = ({r: [] for r in RULES} for _ in range(3))
     first = {}
     for seed in range(N_SEEDS):
@@ -147,9 +143,6 @@ def main():
             nb[rule].append(nelbo(model, x, mask_id, N_MC, g2))
             if seed < 2:
                 first.setdefault(rule, []).append(x)
-        if (seed + 1) % 10 == 0:
-            print(f"  {seed + 1}/{N_SEEDS} seeds", flush=True)
-
     for rule, xs in first.items():
         assert not torch.equal(xs[0], xs[1]), (
             f"{rule}: two seeds produced identical text — tokens are not being "
@@ -192,20 +185,16 @@ def main():
     target = np.array(q[f"confidence@{GAP}"]) - np.array(q[REFERENCE])
     draws = target[idx].mean(axis=1)
     lo, hi = np.percentile(draws, [2.5, 97.5])
-    print("\n" + "=" * 78)
-    print("THE PRE-REGISTERED TEST")
-    print("=" * 78)
+    print("\npre-registered test")
     print(f"  confidence@{GAP} minus confidence, sequence_logprob: "
           f"{target.mean():+.4f} ({lo:+.4f}, {hi:+.4f})")
     print(f"  minimum interesting effect: +0.0200")
     if target.mean() >= 0.02 and lo > 0:
-        print("  -> PASSES. The constraint survives free generation; Part 3 is a")
-        print("     claim about decoding.")
+        print("PASS")
     elif lo > 0:
-        print("  -> clears zero but below the stated minimum. Report as null.")
+        print("BELOW_MINIMUM")
     else:
-        print("  -> FAILS. Part 3 is a claim about reconstruction likelihood, not")
-        print("     about decoding, and the title and abstract must say so.")
+        print("FAIL")
 
     if "--k-sweep" in sys.argv:
         k_sweep(fwd, model, mask_id, seq_len, structural)
@@ -217,7 +206,7 @@ def main():
         w.writerow(["metric", "rule", "mean", "delta_vs_confidence",
                     "boot_lo", "boot_hi", "p_positive"])
         w.writerows(rows)
-    print(f"\nwrote {out}")
+    print(f"saved {out}")
 
 if __name__ == "__main__":
     main()
