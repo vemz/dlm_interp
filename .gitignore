@@ -29,3 +29,4 @@ results/*.png
 /runs_s2
 /runs_s1
 src/scripts/archive/
+/notebooks

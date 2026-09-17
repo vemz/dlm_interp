@@ -9,6 +9,28 @@ import torch
 MODEL_ID = "GSAI-ML/LLaDA-8B-Instruct"
 MASK_ID = 126336         
 BOOT = 2000
+GUARD = {"draws": 0, "fallbacks": 0}
+
+
+def draw_tokens(q, u):
+    """Sample with inverse CDF and correct float32 tail underflow."""
+    cdf = q.cumsum(-1)
+    tokens = (cdf < u).sum(-1)
+    GUARD["draws"] += int(tokens.numel())
+    over = tokens >= q.shape[-1]
+    if over.any():
+        q64 = q[over].double()
+        c64 = q64.cumsum(-1)
+        fix = (c64 < u[over].double() * c64[:, -1:]).sum(-1)
+        fix = fix.clamp_(max=q.shape[-1] - 1)
+        for j in range(fix.numel()):
+            while q64[j, fix[j]] <= 0 and fix[j] > 0:
+                fix[j] -= 1
+        tokens[over] = fix.to(tokens.dtype)
+        GUARD["fallbacks"] += int(over.sum())
+    assert bool((q.gather(-1, tokens.unsqueeze(-1)) > 0).all()), \
+        "drew a zero-probability token"
+    return tokens
 
 def spaced_topk(scores, positions, k, min_gap):
     order = torch.argsort(scores, descending=True).tolist()
@@ -108,7 +130,7 @@ def generate(model, prompt_ids, rule, gen_len, block_len, steps_per_block,
             if temperature > 0:
                 q = (logits[pick] / temperature).softmax(-1)
                 u = u_table[(lo + sel - p).cpu()].to(q.device).unsqueeze(-1)
-                tokens = (q.cumsum(-1) < u).sum(-1).clamp_(0, q.shape[-1] - 1)
+                tokens = draw_tokens(q, u)
             else:
                 tokens = logits[pick].argmax(-1)
             assert not (tokens == mask_id).any(), "sampled the mask token"
@@ -285,6 +307,21 @@ def selfcheck(model, tok, args, device):
     print(f"  two seeds differ at temperature 1: {not torch.equal(c, d)}")
     if torch.equal(c, d):
         print("  FAIL: generations are deterministic; the comparison is vacuous")
+        ok = False
+
+    # A u past the float32 total must not fall through to the last index.
+    edge = torch.zeros(1, logits.shape[-1], device=device)
+    edge[0, 0] = 12.0
+    edge[0, args.mask_id] = float("-inf")
+    edge[0, -1] = float("-inf")          # the index the old clamp returned
+    qe = edge.softmax(-1)
+    before = dict(GUARD)
+    te = draw_tokens(qe, torch.full((1, 1), 2.0, device=device))
+    GUARD.update(before)
+    good = int(te) != logits.shape[-1] - 1 and float(qe[0, te]) > 0
+    print(f"  a draw past the CDF total lands on a token with mass: {good}")
+    if not good:
+        print("  FAIL: the inverse-CDF guard is not active")
         ok = False
 
     uniq = len(set(c.tolist()))
@@ -596,6 +633,11 @@ def gsm8k_tier(model, tok, args, device):
     print("=" * 78)
 
     acc, fmt = gsm8k_eval(model, tok, rules, args.gsm8k, args, device)
+    npz = args.out.replace(".csv", "") + "_per_problem.npz"
+    np.savez(npz, problem=np.arange(len(acc["confidence"])),
+             **{f"acc_{r}": np.array(acc[r]) for r in rules},
+             **{f"fmt_{r}": np.array(fmt[r]) for r in rules})
+    print(f"  per-problem outcomes -> {npz} (pair runs on the problem index)")
 
     n = len(acc["confidence"])
     idx = np.random.default_rng(7).integers(0, n, size=(BOOT, n))
@@ -700,7 +742,7 @@ def main():
         w = csv.writer(h)
         w.writerow(header)
         w.writerows([r + [""] * (len(header) - len(r)) for r in rows])
-    print(f"\nwrote {args.out}")
+    print(f"saved {args.out}; sampler_fallbacks={GUARD['fallbacks']}/{GUARD['draws']}")
 
 if __name__ == "__main__":
     main()
