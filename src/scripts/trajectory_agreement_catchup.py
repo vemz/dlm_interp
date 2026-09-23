@@ -12,7 +12,7 @@ import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from src.dlm_interp.load import CKPT, load_model, nano_forward_fn
-from scripts.archive.counterfactual_bundle_ceiling import baseline_bundle, commit, forward_state
+from src.scripts.archive.counterfactual_bundle_ceiling import baseline_bundle, commit, forward_state
 def digest(path):
     h = hashlib.sha256()
     with open(path, "rb") as f:
