@@ -1,20 +1,12 @@
-"""Separate post-hoc v4 conclusion extraction; frozen v3 is not modified.
-
-Does not alter the frozen v2 collector. Unit targets come from the question,
-never the reference answer. Unsupported or ambiguous conclusions stay unresolved.
-"""
-from __future__ import annotations
-
 import argparse
-from collections import Counter
-import copy
 from decimal import Decimal
-import hashlib
+from fractions import Fraction
 import json
+import math
 from pathlib import Path
 import re
 
-from calendar_swap import NUMBER, analyse, digest, load_rows, save_json
+NUMBER = r'[+-]?(?:[0-9]+|[0-9]{1,3}(?:,[0-9]{3})+)(?:\.[0-9]+)?'
 
 VERSION = 'conclusion-units-v4'
 SCALAR = re.compile(r'(?<![\w.,])' + NUMBER + r'(?![\w,]|\.[0-9])')
@@ -155,46 +147,78 @@ def extract(text, question=''):
     return dict(info, answer=normalized(value), reason='accepted', converted=bool(unit and unit != target))
 
 
-def audit(directory):
-    manifest = json.loads((directory / 'manifest.json').read_text())
-    originals = load_rows(directory, manifest['question_ids'])
-    lookup = {r['question_id']: r for r in originals}
-    originals = [lookup[i] for i in manifest['question_ids'] if i in lookup]
-    rows = copy.deepcopy(originals)
-    decisions = []
-    for row in rows:
-        for arm in ('baseline', 'treated'):
-            old = row[arm]
-            result = ({'answer': None, 'reason': 'length_limit'} if old['status'] == 'length_limit'
-                      else extract(old['text'], row['question']))
-            answer = result['answer']
-            decisions.append(dict(result, question_id=row['question_id'], arm=arm,
-                                  old_answer=old['answer'], old_correct=old['correct'],
-                                  new_correct=answer is not None and answer == row['gold']))
-            row[arm] = dict(old, answer=answer, correct=answer is not None and answer == row['gold'],
-                            status='valid' if answer is not None else result['reason'])
-    transitions = Counter()
-    for row in rows:
-        a, b = row['baseline'], row['treated']
-        if a['correct'] != b['correct']:
-            kind = 'both_extracted' if a['answer'] is not None and b['answer'] is not None else 'extraction_transition'
-            transitions[('loss_' if a['correct'] else 'gain_') + kind] += 1
-    return {'parser_version': VERSION, 'scope': 'post-hoc evaluation audit; no new generation',
-            'source_manifest_sha256': digest(manifest), 'source_records_sha256': digest(originals),
-            'audit_script_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-            'original_summary': analyse(originals, manifest['question_ids']),
-            'revised_summary': analyse(rows, manifest['question_ids']),
-            'decisions': decisions, 'reasons': dict(Counter(d['reason'] for d in decisions)),
-            'correctness_transitions': dict(transitions)}
+
+def wilson(count, n):
+    """95% interval for a detected event; unresolved answers are a separate category."""
+    if not n:
+        return dict(count=count, n=n, rate=None, ci95=None)
+    z = 1.959963984540054
+    p, denominator = count / n, 1 + z*z / n
+    centre = (p + z*z / (2*n)) / denominator
+    half = z * math.sqrt(p*(1-p)/n + z*z/(4*n*n)) / denominator
+    return dict(count=count, n=n, rate=p, ci95=[max(0, centre-half), min(1, centre+half)])
+
+
+def summarize(rows, expected_ids):
+    """Automatic extraction scores, not a substitute for review of the final answers."""
+    ids = [r['question_id'] for r in rows]
+    if len(set(ids)) != len(ids) or not set(ids) <= set(expected_ids):
+        raise ValueError('Duplicate or unexpected questions')
+    pairs = [(r['baseline'], r['treated']) for r in rows]
+    comparable = [(b, t) for b, t in pairs if b['answer'] is not None and t['answer'] is not None]
+    changes = sum(Fraction(b['answer']) != Fraction(t['answer']) for b, t in comparable)
+    gains = sum(not b['correct'] and t['correct'] for b, t in pairs)
+    losses = sum(b['correct'] and not t['correct'] for b, t in pairs)
+    return dict(
+        complete=set(ids) == set(expected_ids), questions_processed=len(rows), questions_planned=len(expected_ids),
+        scope='Frozen v4 extraction scores; primary numeric review pending. Missing extractions are not semantic errors.',
+        text_changes=wilson(sum(b['text'] != t['text'] for b, t in pairs), len(rows)),
+        numeric_changes_all=wilson(changes, len(rows)),
+        numeric_changes_both_extracted=wilson(changes, len(comparable)),
+        reference_matches={a: sum(r[a]['correct'] for r in rows) for a in ('baseline', 'treated')},
+        abstentions={a: sum(r[a]['answer'] is None for r in rows) for a in ('baseline', 'treated')},
+        extraction_score_transitions=dict(gains=gains, losses=losses, net=gains-losses),
+        actual_forward_calls=sum(r['nfe_actual_pair'] + r['nfe_controls'] for r in rows),
+        all_controls_pass=bool(rows) and all(all(r['checks'].get(k) is True for k in
+            ('prompt_unchanged', 'fully_unmasked', 'single_swap', 'no_swap_replay', 'independent_baseline_replay')) for r in rows))
+
+
+def print_review(data):
+    print('Réponses finales — revue conservatrice des expériences historiques')
+    print(f"{'Échantillon':<26} {'Changements':>12} {'Non résolus':>12} {'Gains':>7} {'Pertes':>7}")
+    for label, row in data['experiments'].items():
+        print(f"{label:<26} {row['changes']:>5}/{row['n']:<6} {row['unresolved']:>12} {row['gains']:>7} {row['losses']:>7}")
+    print('\nMêmes 500 questions :')
+    for model, counts in data['matched']['counts'].items():
+        print(f"  {model}: {counts['changed']}/500 changements ({counts['changed']/5:.1f} %), "
+              f"{counts['unresolved']} non résolus.")
+    print('\nChanger la réponse ne garantit pas un gain : une erreur peut devenir une autre erreur.')
+    print('Revue par le même assistant, sans validation humaine indépendante.')
+    print('Les inconnues restent séparées ; aucun gain moyen de justesse n’est démontré.')
+    print('Sources et empreintes : results/reviewed_results.json ; données complètes dans l’archive.')
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('path', nargs='?', type=Path,
+                        default=Path(__file__).resolve().parents[2]/'results/reviewed_results.json',
+                        help='Reviewed JSON, summary JSON, or compact run phase directory')
+    parser.add_argument('--json', action='store_true', help='Print the complete machine-readable summary')
+    args = parser.parse_args()
+    if not args.path.exists():
+        parser.error(f'{args.path} absent. Download a run or restore the local research archive (see README).')
+    if args.path.is_dir():
+        # Import lazily so printing an existing JSON needs only Python’s standard library.
+        from llada import load_saved
+        manifest = json.loads((args.path/'manifest.json').read_text())
+        data = summarize(load_saved(args.path, manifest), [q['id'] for q in manifest['examples']])
+    else:
+        data = json.loads(args.path.read_text())
+    if data.get('format') == 'reviewed-calendar-results-v1' and not args.json:
+        print_review(data)
+    else:
+        print(json.dumps(data, indent=2, ensure_ascii=False))
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('directory', type=Path)
-    parser.add_argument('--out', required=True, type=Path)
-    args = parser.parse_args()
-    if args.out.resolve().parent == args.directory.resolve():
-        parser.error('write the audit outside the original records directory')
-    result = audit(args.directory)
-    save_json(args.out, result)
-    print(json.dumps({k: result[k] for k in ('revised_summary', 'reasons', 'correctness_transitions')}, indent=2))
+    main()
